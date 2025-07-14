@@ -1,10 +1,14 @@
 package com.flipkart.grayskull.controllers;
 
+import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
+import com.flipkart.grayskull.models.enums.AuditAction;
+import com.flipkart.grayskull.models.enums.AuditStatus;
 import com.flipkart.grayskull.models.enums.SecretState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
+import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -16,6 +20,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -25,6 +31,7 @@ import java.util.Optional;
 public class SecretController {
 
     private final SecretService secretService;
+    private final AsyncAuditLogger asyncAuditLogger;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
@@ -56,8 +63,17 @@ public class SecretController {
     @GetMapping("/{secretName}/data")
     @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, #secretName, 'READ_SECRET_VALUE')")
     public ResponseTemplate<SecretDataResponse> readSecretValue(@PathVariable("projectId") @NotBlank @Size(max = 255) String projectId, @PathVariable("secretName") @NotBlank @Size(max = 255) String secretName) {
-        SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
-        return ResponseTemplate.success(response, "Successfully read secret value.");
+        try {
+            SecretDataResponse response = secretService.readSecretValue(projectId, secretName);
+            Map<String, String> auditMetadata = new HashMap<>();
+            SanitizingObjectMapper.addToMap(auditMetadata, "result", response);
+            asyncAuditLogger.log(projectId, secretName, response.getDataVersion(), AuditAction.READ_SECRET.name(), AuditStatus.SUCCESS.name(), auditMetadata);
+            return ResponseTemplate.success(response, "Successfully read secret value.");
+        } catch (Exception e) {
+            Map<String, String> auditMetadata = Map.of("errorMessage", e.getMessage(), "errorType", e.getClass().getName());
+            asyncAuditLogger.log(projectId, secretName, null, AuditAction.READ_SECRET.name(), AuditStatus.FAILURE.name(), auditMetadata);
+            throw e;
+        }
     }
 
     @Operation(summary = "Upgrades the data of an existing secret, creating a new version.")

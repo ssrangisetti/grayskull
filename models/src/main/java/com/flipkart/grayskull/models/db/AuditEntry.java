@@ -67,4 +67,13 @@ public class AuditEntry {
      */
     private Map<String, String> metadata;
 
-} 
+    public AuditEntry(String projectId, String secretName, Integer secretVersion, String action, String status, String userId, Map<String, String> metadata) {
+        this.projectId = projectId;
+        this.secretName = secretName;
+        this.secretVersion = secretVersion;
+        this.action = action;
+        this.status = status;
+        this.userId = userId;
+        this.metadata = metadata;
+    }
+}

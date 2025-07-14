@@ -1,7 +1,5 @@
 package com.flipkart.grayskull.audit;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
@@ -40,7 +38,6 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private static final String DEFAULT_USER = "system";
-    private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
      * Defines the pointcut for all methods annotated with {@link Auditable}.
@@ -126,11 +123,7 @@ public class AuditAspect {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
-                try {
-                    metadata.put(key, OBJECT_MAPPER.writeValueAsString(value));
-                } catch (JsonProcessingException e) {
-                    metadata.put(key, "Error serializing object: " + e.getMessage());
-                }
+                SanitizingObjectMapper.addToMap(metadata, key, value);
             }
         });
 
@@ -139,11 +132,7 @@ public class AuditAspect {
             metadata.put("errorType", exception.getClass().getName());
         }
         if (result != null) {
-            try {
-                metadata.put("result", OBJECT_MAPPER.writeValueAsString(result));
-            } catch (JsonProcessingException e) {
-                metadata.put("result", "Error serializing object: " + e.getMessage());
-            }
+            SanitizingObjectMapper.addToMap(metadata, "result", result);
         }
         return metadata;
     }
