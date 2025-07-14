@@ -4,19 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
 import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
-import com.flipkart.grayskull.repositories.AuditEntryRepository;
 import com.flipkart.grayskull.utils.CloseableReentrantLock;
 import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.input.Tailer;
 import org.apache.commons.io.input.TailerListenerAdapter;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -34,31 +29,22 @@ public class AsyncAuditLogProcessor extends TailerListenerAdapter {
     private final ScheduledExecutorService scheduler; // scheduler for scheduling time based flushing
     private final List<AuditEntry> buffer = new ArrayList<>(); // active buffer need not be concurrent because we are handling everything with locks
     private final int maxBatchSize; // max batch size after which gets flushed
-    private final AuditProperties auditProperties;
+    private final int flushInterval;
 
     private Checkpoint checkpoint;
     private boolean checkpointReached = false;
     private final AtomicLong lines = new AtomicLong(0);
 
-
-    private final AuditEntryRepository auditEntryRepository;
-    private final AuditCheckpointRepository auditCheckpointRepository;
+    private final AuditLogFlusher flusher;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
-    /*
-     * required for handling <a href="https://sonarsource.github.io/rspec/#/rspec/S6809">java:S6809</a>
-     * method marked as @Transactional should not be called with 'this'. instead we should own beans as dependency and call it.
-     */
-    @Setter(onMethod_ = {@Autowired, @Lazy})
-    private AsyncAuditLogProcessor transactionalAsyncAuditLogProcessor;
 
-    public AsyncAuditLogProcessor(AuditEntryRepository auditEntryRepository,
-                                  AuditCheckpointRepository auditCheckpointRepository,
+    public AsyncAuditLogProcessor(AuditCheckpointRepository auditCheckpointRepository,
                                   AuditProperties auditProperties,
+                                  AuditLogFlusher flusher,
                                   ObjectMapper objectMapper,
                                   MeterRegistry meterRegistry) {
-        this.auditEntryRepository = auditEntryRepository;
-        this.auditCheckpointRepository = auditCheckpointRepository;
+        this.flusher = flusher;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
 
@@ -69,7 +55,7 @@ public class AsyncAuditLogProcessor extends TailerListenerAdapter {
                 .get();
         this.maxBatchSize = auditProperties.getBatchSize();
         this.scheduler = Executors.newSingleThreadScheduledExecutor(AsyncAuditLogProcessor::newFlusherThread);
-        this.auditProperties = auditProperties;
+        this.flushInterval = auditProperties.getBatchTimeSeconds();
     }
 
     private static Thread newFlusherThread(final Runnable runnable) {
@@ -80,7 +66,7 @@ public class AsyncAuditLogProcessor extends TailerListenerAdapter {
 
     @PostConstruct
     public void startFlusher() {
-        this.scheduler.scheduleAtFixedRate(transactionalAsyncAuditLogProcessor::flush, auditProperties.getBatchTimeSeconds(), auditProperties.getBatchTimeSeconds(), TimeUnit.SECONDS);
+        this.scheduler.scheduleAtFixedRate(this::flush, flushInterval, flushInterval, TimeUnit.SECONDS);
     }
 
     @Override
@@ -93,7 +79,7 @@ public class AsyncAuditLogProcessor extends TailerListenerAdapter {
             if (checkpointReached) {
                 buffer.add(objectMapper.readValue(line, AuditEntry.class));
                 if (buffer.size() == maxBatchSize) {
-                    transactionalAsyncAuditLogProcessor.flush();
+                    this.flush();
                 }
             }
         } catch (Exception e) {
@@ -113,16 +99,14 @@ public class AsyncAuditLogProcessor extends TailerListenerAdapter {
     /**
      * This method should never throw an exception because java's scheduler quits if an exception is thrown
      */
-    @Transactional
     public void flush() {
         try (var ignored = lock.lockAsResource()) {
             if (buffer.isEmpty()) {
                 return;
             }
-            auditEntryRepository.saveAll(buffer);
             buffer.clear();
             checkpoint.setLines(this.lines.get());
-            checkpoint = auditCheckpointRepository.save(checkpoint);
+            checkpoint = flusher.flush(buffer, checkpoint);
         } catch (Exception e) {
             log.error("Failed to flush audits at {}: {}", this.lines.get(), e.getMessage(), e);
             meterRegistry.counter("audit-log-flush-error").increment();

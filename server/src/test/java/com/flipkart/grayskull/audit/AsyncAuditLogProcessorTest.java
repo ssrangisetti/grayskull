@@ -7,7 +7,6 @@ import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
 import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
-import com.flipkart.grayskull.repositories.AuditEntryRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +36,7 @@ class AsyncAuditLogProcessorTest {
     Path tempDir;
 
     private AsyncAuditLogProcessor auditLogProcessor;
-    private AuditEntryRepository auditEntryRepository;
+    private AuditLogFlusher flusher;
     private AuditCheckpointRepository auditCheckpointRepository;
     private AuditProperties auditProperties;
     private ObjectMapper objectMapper;
@@ -50,7 +49,7 @@ class AsyncAuditLogProcessorTest {
         Files.createFile(auditFile.toPath());
 
         // Mock dependencies
-        auditEntryRepository = mock(AuditEntryRepository.class);
+        flusher = mock(AuditLogFlusher.class);
         auditCheckpointRepository = mock(AuditCheckpointRepository.class);
         meterRegistry = mock(MeterRegistry.class);
         objectMapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
@@ -64,15 +63,13 @@ class AsyncAuditLogProcessorTest {
 
         // Create processor
         auditLogProcessor = new AsyncAuditLogProcessor(
-                auditEntryRepository,
                 auditCheckpointRepository,
                 auditProperties,
+                flusher,
                 objectMapper,
                 meterRegistry
         );
 
-        // Set the transactional processor reference
-        auditLogProcessor.setTransactionalAsyncAuditLogProcessor(auditLogProcessor);
     }
 
     @Test
@@ -139,8 +136,7 @@ class AsyncAuditLogProcessorTest {
         checkpoint.setLines(0L);
 
         // Mock successful save
-        when(auditEntryRepository.saveAll(anyList())).thenReturn(List.of());
-        when(auditCheckpointRepository.save(any(Checkpoint.class))).thenReturn(checkpoint);
+        when(flusher.flush(anyList(), any())).thenReturn(checkpoint);
 
         // Act
         auditLogProcessor.handle(line1);
@@ -148,8 +144,7 @@ class AsyncAuditLogProcessorTest {
         auditLogProcessor.handle(line3); // This should trigger flush
 
         // Assert
-        verify(auditEntryRepository).saveAll(anyList());
-        verify(auditCheckpointRepository).save(any(Checkpoint.class));
+        verify(flusher).flush(any(), any());
     }
 
     @Test
@@ -158,7 +153,7 @@ class AsyncAuditLogProcessorTest {
         auditLogProcessor.flush();
 
         // Assert
-        verify(auditEntryRepository, never()).saveAll(anyList());
+        verify(flusher, never()).flush(any(), any());
         verify(auditCheckpointRepository, never()).save(any(Checkpoint.class));
     }
 
@@ -172,15 +167,13 @@ class AsyncAuditLogProcessorTest {
         buffer.add(auditEntry1);
         buffer.add(auditEntry2);
 
-        when(auditEntryRepository.saveAll(anyList())).thenReturn(List.of());
-        when(auditCheckpointRepository.save(any(Checkpoint.class))).thenReturn(new Checkpoint("test-node"));
+        when(flusher.flush(anyList(), any())).thenReturn(new Checkpoint("test-node"));
 
         // Act
         auditLogProcessor.flush();
 
         // Assert
-        verify(auditEntryRepository).saveAll(buffer);
-        verify(auditCheckpointRepository).save(any(Checkpoint.class));
+        verify(flusher).flush(anyList(), any());
         assertEquals(0, buffer.size()); // Buffer should be cleared
     }
 
@@ -191,7 +184,7 @@ class AsyncAuditLogProcessorTest {
         List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogProcessor, "buffer");
         buffer.add(auditEntry);
 
-        when(auditEntryRepository.saveAll(anyList())).thenThrow(new RuntimeException("Database error"));
+        when(flusher.flush(anyList(), any())).thenThrow(new RuntimeException("Database error"));
         Counter counter = mock(Counter.class);
         when(meterRegistry.counter("audit-log-flush-error")).thenReturn(counter);
 
@@ -243,9 +236,9 @@ class AsyncAuditLogProcessorTest {
 
         // Act
         AsyncAuditLogProcessor newProcessor = new AsyncAuditLogProcessor(
-                auditEntryRepository,
                 auditCheckpointRepository,
                 auditProperties,
+                flusher,
                 objectMapper,
                 meterRegistry
         );
@@ -266,9 +259,9 @@ class AsyncAuditLogProcessorTest {
 
         // Act
         AsyncAuditLogProcessor newProcessor = new AsyncAuditLogProcessor(
-                auditEntryRepository,
                 auditCheckpointRepository,
                 auditProperties,
+                flusher,
                 objectMapper,
                 meterRegistry
         );

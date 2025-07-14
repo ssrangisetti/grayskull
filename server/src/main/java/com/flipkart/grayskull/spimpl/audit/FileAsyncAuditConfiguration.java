@@ -1,6 +1,7 @@
 package com.flipkart.grayskull.spimpl.audit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flipkart.grayskull.audit.AuditLogFlusher;
 import com.flipkart.grayskull.audit.AsyncAuditLogProcessor;
 import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
@@ -21,11 +22,16 @@ public class FileAsyncAuditConfiguration {
     }
 
     @Bean
-    public AsyncAuditLogProcessor asyncAuditLogProcessor(AuditEntryRepository auditEntryRepository,
+    public AsyncAuditLogProcessor asyncAuditLogProcessor(AuditLogFlusher flusher,
                                                          AuditCheckpointRepository auditCheckpointRepository,
                                                          AuditProperties auditProperties,
                                                          ObjectMapper objectMapper,
                                                          MeterRegistry meterRegistry) {
-        return new AsyncAuditLogProcessor(auditEntryRepository, auditCheckpointRepository, auditProperties, objectMapper, meterRegistry);
+        return new AsyncAuditLogProcessor(auditCheckpointRepository, auditProperties, flusher, objectMapper, meterRegistry);
+    }
+
+    @Bean
+    public AuditLogFlusher asyncAuditLogFlusher(AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) {
+        return new AuditLogFlusher(auditEntryRepository, auditCheckpointRepository);
     }
 }
