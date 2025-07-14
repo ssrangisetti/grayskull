@@ -4,6 +4,7 @@ import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
 import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
 import com.flipkart.grayskull.repositories.AuditEntryRepository;
+import io.micrometer.core.annotation.Counted;
 import lombok.AllArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ public class AuditLogFlusher {
     private final AuditCheckpointRepository auditCheckpointRepository;
 
     @Transactional
+    @Counted(recordFailuresOnly = true)
     public Checkpoint flush(List<AuditEntry> buffer, Checkpoint checkpoint) {
         auditEntryRepository.saveAll(buffer);
         return auditCheckpointRepository.save(checkpoint);

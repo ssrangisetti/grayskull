@@ -7,8 +7,6 @@ import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
 import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -30,17 +28,16 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.when;
 
-class AsyncAuditLogProcessorTest {
+class AuditLogTailerTest {
 
     @TempDir
     Path tempDir;
 
-    private AsyncAuditLogProcessor auditLogProcessor;
+    private AuditLogTailer auditLogTailer;
     private AuditLogFlusher flusher;
     private AuditCheckpointRepository auditCheckpointRepository;
     private AuditProperties auditProperties;
     private ObjectMapper objectMapper;
-    private MeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -51,7 +48,6 @@ class AsyncAuditLogProcessorTest {
         // Mock dependencies
         flusher = mock(AuditLogFlusher.class);
         auditCheckpointRepository = mock(AuditCheckpointRepository.class);
-        meterRegistry = mock(MeterRegistry.class);
         objectMapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
 
         // Create AuditProperties
@@ -62,12 +58,11 @@ class AsyncAuditLogProcessorTest {
         auditProperties.setBatchTimeSeconds(2);
 
         // Create processor
-        auditLogProcessor = new AsyncAuditLogProcessor(
-                auditCheckpointRepository,
-                auditProperties,
+        auditLogTailer = new AuditLogTailer(
                 flusher,
                 objectMapper,
-                meterRegistry
+                auditProperties,
+                auditCheckpointRepository
         );
 
     }
@@ -79,26 +74,12 @@ class AsyncAuditLogProcessorTest {
         String auditLine = objectMapper.writeValueAsString(auditEntry);
 
         // Act
-        auditLogProcessor.handle(auditLine);
+        auditLogTailer.handle(auditLine);
 
         // Assert
-        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogProcessor, "buffer");
+        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogTailer, "buffer");
         assertEquals(1, buffer.size());
         assertEquals(auditEntry.getAction(), buffer.get(0).getAction());
-    }
-
-    @Test
-    void testHandle_WithInvalidJson_SendsAlert() {
-        // Arrange
-        String invalidJson = "{ invalid json }";
-        Counter counter = mock(Counter.class);
-        when(meterRegistry.counter("audit-log-handle-error")).thenReturn(counter);
-
-        // Act
-        auditLogProcessor.handle(invalidJson);
-
-        // Assert
-        verify(counter).increment();
     }
 
     @Test
@@ -110,13 +91,13 @@ class AsyncAuditLogProcessorTest {
         // Mock checkpoint that hasn't been reached yet
         Checkpoint checkpoint = new Checkpoint("test-node");
         checkpoint.setLines(5L); // Current line should be > 5 to process
-        ReflectionTestUtils.setField(auditLogProcessor, "checkpoint", checkpoint);
+        ReflectionTestUtils.setField(auditLogTailer, "checkpoint", checkpoint);
 
         // Act
-        auditLogProcessor.handle(auditLine);
+        auditLogTailer.handle(auditLine);
 
         // Assert
-        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogProcessor, "buffer");
+        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogTailer, "buffer");
         assertEquals(0, buffer.size());
     }
 
@@ -139,9 +120,9 @@ class AsyncAuditLogProcessorTest {
         when(flusher.flush(anyList(), any())).thenReturn(checkpoint);
 
         // Act
-        auditLogProcessor.handle(line1);
-        auditLogProcessor.handle(line2);
-        auditLogProcessor.handle(line3); // This should trigger flush
+        auditLogTailer.handle(line1);
+        auditLogTailer.handle(line2);
+        auditLogTailer.handle(line3); // This should trigger flush
 
         // Assert
         verify(flusher).flush(any(), any());
@@ -150,7 +131,7 @@ class AsyncAuditLogProcessorTest {
     @Test
     void testFlush_WithEmptyBuffer_DoesNothing() {
         // Act
-        auditLogProcessor.flush();
+        auditLogTailer.flush();
 
         // Assert
         verify(flusher, never()).flush(any(), any());
@@ -163,14 +144,14 @@ class AsyncAuditLogProcessorTest {
         AuditEntry auditEntry1 = createSampleAuditEntry("SECRET_READ");
         AuditEntry auditEntry2 = createSampleAuditEntry("SECRET_CREATE");
 
-        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogProcessor, "buffer");
+        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogTailer, "buffer");
         buffer.add(auditEntry1);
         buffer.add(auditEntry2);
 
         when(flusher.flush(anyList(), any())).thenReturn(new Checkpoint("test-node"));
 
         // Act
-        auditLogProcessor.flush();
+        auditLogTailer.flush();
 
         // Assert
         verify(flusher).flush(anyList(), any());
@@ -178,54 +159,16 @@ class AsyncAuditLogProcessorTest {
     }
 
     @Test
-    void testFlush_WithDatabaseError_SendsAlert() {
-        // Arrange
-        AuditEntry auditEntry = createSampleAuditEntry();
-        List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogProcessor, "buffer");
-        buffer.add(auditEntry);
-
-        when(flusher.flush(anyList(), any())).thenThrow(new RuntimeException("Database error"));
-        Counter counter = mock(Counter.class);
-        when(meterRegistry.counter("audit-log-flush-error")).thenReturn(counter);
-
-        // Act
-        auditLogProcessor.flush();
-
-        // Assert
-        verify(counter).increment();
-    }
-
-    @Test
     void testFileRotated_ResetsLineCounter() {
         // Arrange
-        AtomicLong lines = (AtomicLong) ReflectionTestUtils.getField(auditLogProcessor, "lines");
+        AtomicLong lines = (AtomicLong) ReflectionTestUtils.getField(auditLogTailer, "lines");
         lines.set(100L);
 
         // Act
-        auditLogProcessor.fileRotated();
+        auditLogTailer.fileRotated();
 
         // Assert
         assertEquals(0L, lines.get());
-    }
-
-    @Test
-    void testStartFlusher_SchedulesFlushTask() {
-        // Act
-        auditLogProcessor.startFlusher();
-
-        // Assert - Verify that the scheduler was called (indirectly through reflection)
-        // The actual scheduling is tested through integration tests
-        assertNotNull(ReflectionTestUtils.getField(auditLogProcessor, "scheduler"));
-    }
-
-    @Test
-    void testClose_ShutsDownResources() {
-        // Act
-        auditLogProcessor.close();
-
-        // Assert - Verify that resources are properly closed
-        // The actual cleanup is tested through integration tests
-        assertNotNull(ReflectionTestUtils.getField(auditLogProcessor, "tailer"));
     }
 
     @Test
@@ -235,16 +178,15 @@ class AsyncAuditLogProcessorTest {
                 .thenReturn(Optional.empty());
 
         // Act
-        AsyncAuditLogProcessor newProcessor = new AsyncAuditLogProcessor(
-                auditCheckpointRepository,
-                auditProperties,
+        AuditLogTailer newTailer = new AuditLogTailer(
                 flusher,
                 objectMapper,
-                meterRegistry
+                auditProperties,
+                auditCheckpointRepository
         );
 
         // Assert
-        Checkpoint checkpoint = (Checkpoint) ReflectionTestUtils.getField(newProcessor, "checkpoint");
+        Checkpoint checkpoint = (Checkpoint) ReflectionTestUtils.getField(newTailer, "checkpoint");
         assertEquals("test-node", checkpoint.getName());
         assertEquals(0L, checkpoint.getLines());
     }
@@ -258,16 +200,15 @@ class AsyncAuditLogProcessorTest {
                 .thenReturn(Optional.of(existingCheckpoint));
 
         // Act
-        AsyncAuditLogProcessor newProcessor = new AsyncAuditLogProcessor(
-                auditCheckpointRepository,
-                auditProperties,
+        AuditLogTailer newTailer = new AuditLogTailer(
                 flusher,
                 objectMapper,
-                meterRegistry
+                auditProperties,
+                auditCheckpointRepository
         );
 
         // Assert
-        Checkpoint checkpoint = (Checkpoint) ReflectionTestUtils.getField(newProcessor, "checkpoint");
+        Checkpoint checkpoint = (Checkpoint) ReflectionTestUtils.getField(newTailer, "checkpoint");
         assertEquals("test-node", checkpoint.getName());
         assertEquals(50L, checkpoint.getLines());
     }
