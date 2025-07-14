@@ -59,10 +59,11 @@ management:
     annotations:
       enabled: true
 
-swagger:
-  ui:
-    path: /swagger-ui.html
-    enabled: true
-    version: 1.0.0
-    title: Grayskull API
-    description: API for managing secrets in Grayskull
+audit:
+  batch-time-seconds: 5
+  node-name: local
+  batch-size: 5
+  max-history: 10
+  max-file-size: 10kb
+  file-path: /tmp/grayskull-audit.log
+  file-pattern: /tmp/grayskull-audit-%d{yyyy-MM-dd}.%i.log.gz

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
@@ -14,6 +15,7 @@ import java.util.Map;
  * mask fields annotated with {@link com.flipkart.grayskull.models.audit.AuditMask}.
  * It also includes the {@link JavaTimeModule} to ensure correct serialization of Java 8 date/time types.
  */
+@Slf4j
 @UtilityClass
 public class SanitizingObjectMapper {
 
@@ -39,6 +41,7 @@ public class SanitizingObjectMapper {
         try {
             map.put(key, MASK_OBJECT_MAPPER.writeValueAsString(value));
         } catch (JsonProcessingException e) {
+            log.debug("Error serializing object: {}", e.getMessage(), e);
             map.put(key, "Error serializing object: " + e.getMessage());
         }
     }

@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 public class FileAsyncAuditLogger implements AsyncAuditLogger {
@@ -67,7 +68,8 @@ public class FileAsyncAuditLogger implements AsyncAuditLogger {
     @Override
     public void log(String projectId, String secret, Integer secretVersion, String action, String status, Map<String, String> metadata) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        final AuditEntry auditEntry = new AuditEntry(null, projectId, secret, secretVersion, action, status, username, Instant.now(), metadata);
+        // adding id and time so that created time is not overridden by the @CreatedDate annotation while doing the flush at a later time
+        AuditEntry auditEntry = new AuditEntry(UUID.randomUUID().toString(), projectId, secret, secretVersion, action, status, username, Instant.now(), metadata);
         fileAppender.doAppend(auditEntry);
     }
 }
