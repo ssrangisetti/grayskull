@@ -58,6 +58,9 @@ public class AuditLogTailer extends TailerListenerAdapter {
     public void fileRotated() {
         try (var ignored = lock.lockAsResource()) {
             this.lines.set(0);
+            if (!checkpointReached) {
+                checkpoint.setLines(0);
+            }
             log.info("audit file rotated");
         }
     }
