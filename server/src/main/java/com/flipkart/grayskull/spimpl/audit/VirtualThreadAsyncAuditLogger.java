@@ -1,8 +1,8 @@
 package com.flipkart.grayskull.spimpl.audit;
 
 import com.flipkart.grayskull.models.db.AuditEntry;
-import com.flipkart.grayskull.repositories.AuditEntryRepository;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
+import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 

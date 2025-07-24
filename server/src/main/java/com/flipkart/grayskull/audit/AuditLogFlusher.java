@@ -2,8 +2,8 @@ package com.flipkart.grayskull.audit;
 
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
-import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
-import com.flipkart.grayskull.repositories.AuditEntryRepository;
+import com.flipkart.grayskull.spi.repositories.AuditCheckpointRepository;
+import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import io.micrometer.core.annotation.Counted;
 import lombok.AllArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;

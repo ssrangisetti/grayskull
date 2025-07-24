@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
-import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
+import com.flipkart.grayskull.spi.repositories.AuditCheckpointRepository;
 import com.flipkart.grayskull.utils.CloseableReentrantLock;
 import io.micrometer.core.annotation.Counted;
 import lombok.extern.slf4j.Slf4j;

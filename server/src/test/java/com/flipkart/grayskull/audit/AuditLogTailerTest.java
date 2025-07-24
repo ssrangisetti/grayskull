@@ -6,7 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flipkart.grayskull.configuration.properties.AuditProperties;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.db.Checkpoint;
-import com.flipkart.grayskull.repositories.AuditCheckpointRepository;
+import com.flipkart.grayskull.spi.repositories.AuditCheckpointRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,7 +79,7 @@ class AuditLogTailerTest {
         // Assert
         List<AuditEntry> buffer = (List<AuditEntry>) ReflectionTestUtils.getField(auditLogTailer, "buffer");
         assertEquals(1, buffer.size());
-        assertEquals(auditEntry.getAction(), buffer.get(0).getAction());
+        assertEquals(auditEntry.getAction(), buffer.getFirst().getAction());
     }
 
     @Test
