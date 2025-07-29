@@ -5,7 +5,6 @@ import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 
 /**
@@ -55,7 +54,6 @@ public class AuditEntry {
     /**
      * The timestamp when the action occurred, recorded in UTC with offset information.
      */
-    @CreatedDate
     private Instant timestamp;
 
     /**
@@ -63,4 +61,13 @@ public class AuditEntry {
      */
     private Map<String, String> metadata;
 
-} 
+    public AuditEntry(String projectId, String secretName, Integer secretVersion, String action, String userId, Map<String, String> metadata) {
+        this.projectId = projectId;
+        this.secretName = secretName;
+        this.secretVersion = secretVersion;
+        this.action = action;
+        this.userId = userId;
+        this.metadata = metadata;
+        this.timestamp = Instant.now();
+    }
+}

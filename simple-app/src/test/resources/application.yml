@@ -6,4 +6,11 @@ spring:
 grayskull:
   crypto:
     keys:
-      test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE=" 
+      test-key: "MfDeylVH3ZmvnrK+XJv259fzjFB55+9yZaUr1OYvNVE="
+
+audit:
+  node-name: localhost
+  audit-folder: ${java.io.tmpdir}
+  max-audit-lines: 10
+  batch-time-seconds: 10
+  rotate-time-seconds: 27

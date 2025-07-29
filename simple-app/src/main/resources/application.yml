@@ -58,11 +58,9 @@ management:
   observations:
     annotations:
       enabled: true
-
-swagger:
-  ui:
-    path: /swagger-ui.html
-    enabled: true
-    version: 1.0.0
-    title: Grayskull API
-    description: API for managing secrets in Grayskull
+audit:
+  node-name: localhost
+  audit-folder: /tmp/wals2
+  max-audit-lines: 10
+  batch-time-seconds: 10
+  rotate-time-seconds: 27

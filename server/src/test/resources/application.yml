@@ -36,4 +36,11 @@ grayskull:
         project: "test-project"
         actions:
           - "LIST_SECRETS"
-          - "READ_SECRET_METADATA" 
+          - "READ_SECRET_METADATA"
+
+audit:
+  node-name: localhost
+  audit-folder: ${java.io.tmpdir}
+  max-audit-lines: 10
+  batch-time-seconds: 10
+  rotate-time-seconds: 27

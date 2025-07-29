@@ -1,7 +1,5 @@
 package com.flipkart.grayskull.audit;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.audit.utils.SanitizingObjectMapper;
 import com.flipkart.grayskull.models.db.AuditEntry;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
@@ -39,7 +37,6 @@ public class AuditAspect {
 
     private final AuditEntryRepository auditEntryRepository;
     private static final String DEFAULT_USER = "system";
-    private static final ObjectMapper OBJECT_MAPPER = SanitizingObjectMapper.create();
 
     /**
      * Advice that runs after an audited method returns successfully.
@@ -70,8 +67,8 @@ public class AuditAspect {
 
         Map<String, String> metadata = buildMetadata(arguments, result);
 
-        AuditEntry entry = new AuditEntry(null, projectId, secretName, secretVersion,
-                auditable.action().name(), getUserId(), null, metadata);
+        AuditEntry entry = new AuditEntry(projectId, secretName, secretVersion,
+                auditable.action().name(), getUserId(), metadata);
 
         auditEntryRepository.save(entry);
     }
@@ -102,20 +99,12 @@ public class AuditAspect {
         Map<String, String> metadata = new HashMap<>();
         arguments.forEach((key, value) -> {
             if (value != null) {
-                try {
-                    metadata.put(key, OBJECT_MAPPER.writeValueAsString(value));
-                } catch (JsonProcessingException e) {
-                    metadata.put(key, "Error serializing object: " + e.getMessage());
-                }
+                SanitizingObjectMapper.addToMap(metadata, key, value);
             }
         });
 
         if (result != null) {
-            try {
-                metadata.put("result", OBJECT_MAPPER.writeValueAsString(result));
-            } catch (JsonProcessingException e) {
-                metadata.put("result", "Error serializing object: " + e.getMessage());
-            }
+            SanitizingObjectMapper.addToMap(metadata, "result", result);
         }
         return metadata;
     }
