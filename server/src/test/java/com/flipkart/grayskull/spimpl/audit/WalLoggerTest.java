@@ -71,7 +71,7 @@ class WalLoggerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"12, 8, 9, 12", "10, 0, 1, 10", "11, 10, 11, 11"})
+    @CsvSource({"12, 8, 9, 12", "10, 0, 1, 10", "10, 10, 0, -1", "11, 10, 11, 11"})
     void shouldReadBacklogAudits(int existing, int committed, long expectedRangeStart, long expectedRangeEnd) throws IOException {
         // Given - maxLines is 10
         List<AuditEntry> entries = createMultipleAuditEntries(existing);
@@ -82,14 +82,14 @@ class WalLoggerTest {
         }
 
         // When
-        List<AuditOrTick.Audit> backlog = walLogger.backlogAudits(committed).toList();
+        List<AuditOrTick.Audit> backlog = walLogger.backlogAudits(committed);
 
         // Then
         assertThat(backlog.stream().map(AuditOrTick.Audit::counter).toList()).isEqualTo(LongStream.rangeClosed(expectedRangeStart, expectedRangeEnd).boxed().toList());
     }
 
     @ParameterizedTest
-    @CsvSource({"12, 11, 1", "10, 10, 2", "10, 9, 2"})
+    @CsvSource({"12, 11, 1", "10, 10, 1", "10, 9, 2"})
     // - maxLines is 10
     void shouldCleanOldFiles(int total, int committed, int expectedRemaining) throws IOException {
         // Given

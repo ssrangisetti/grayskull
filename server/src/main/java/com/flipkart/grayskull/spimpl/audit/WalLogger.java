@@ -11,12 +11,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * Wal code inspired from <a href="https://github.com/lant/wal">lant/wal</a>
@@ -98,42 +99,37 @@ public class WalLogger {
             walFiles = files
                     .filter(path -> FILE_NAME_PATTERN.matcher(path.getFileName().toString()).matches())
                     .sorted()
-                    .toList();
+                    .filter(path -> path.compareTo(filePath(auditFolder, latestEntry)) <= 0)
+                    .collect(toList());
         }
-        List<Path> walFilesToDelete = new ArrayList<>();
+        walFiles.removeLast();
         for (Path walFile : walFiles) {
-            try (var lines = Files.lines(walFile)) {
-                var lastLine = lines.reduce(WalLogger::lastElementReducer);
-                if (lastLine.isPresent()) {
-                    String entry = lastLine.get().split(",", 2)[0];
-                    long entryNum = Long.parseLong(entry);
-                    if (entryNum < latestEntry) {
-                        walFilesToDelete.add(walFile);
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Error reading file {}, not processing it", walFile, e);
-            }
-        }
-        for (Path walFile : walFilesToDelete) {
             Files.deleteIfExists(walFile);
         }
     }
 
-    public Stream<AuditOrTick.Audit> backlogAudits(long lastEntry) throws IOException {
+    public List<AuditOrTick.Audit> backlogAudits(long lastEntry) throws IOException {
         Path auditFolderPath = Path.of(auditFolder);
-        Stream<Path> walFiles;
+        List<Path> walFiles;
         try (var files = Files.list(auditFolderPath)) {
             walFiles = files
-                    .filter(path -> path.getFileName().toString().startsWith(FILE_NAME_PREFIX))
+                    .filter(path -> FILE_NAME_PATTERN.matcher(path.getFileName().toString()).matches())
                     .sorted()
-                    .toList()
-                    .stream();
+                    .toList();
         }
+        long idx = Collections.binarySearch(walFiles, filePath(auditFolder, lastEntry));
+        if (idx < 0) {
+            idx = -idx - 1;
+            idx -= 1;
+        }
+
         return walFiles
-                .flatMap(ThrowingFunction.toFunction(Files::lines))
+                .stream()
+                .skip(idx)
+                .flatMap(ThrowingFunction.toFunction(path -> Files.readAllLines(path).stream()))
                 .map(ThrowingFunction.toFunction(this::fromLine))
-                .filter(audit -> audit.counter() > lastEntry);
+                .filter(audit -> audit.counter() > lastEntry)
+                .toList();
     }
 
     private AuditOrTick.Audit fromLine(String line) throws JsonProcessingException {

@@ -6,9 +6,9 @@ import com.flipkart.grayskull.spi.repositories.AuditCheckpointRepository;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,14 +46,14 @@ class WalBacklogProcessorTest {
         AuditEntry auditEntry3 = createTestAuditEntry("project3", "secret3", 3);
         AuditEntry auditEntry4 = createTestAuditEntry("project4", "secret4", 4);
 
-        Stream<AuditOrTick.Audit> auditStream = Stream.of(
+        List<AuditOrTick.Audit> auditList = List.of(
                 new AuditOrTick.Audit(auditEntry1, 1L),
                 new AuditOrTick.Audit(auditEntry2, 2L),
                 new AuditOrTick.Audit(auditEntry3, 3L),
                 new AuditOrTick.Audit(auditEntry4, 4L)
         );
 
-        when(walLogger.backlogAudits(0L)).thenReturn(auditStream);
+        when(walLogger.backlogAudits(0L)).thenReturn(auditList);
 
         // When
         walBacklogProcessor.processAuditBacklog();
@@ -92,12 +92,12 @@ class WalBacklogProcessorTest {
         AuditEntry auditEntry1 = createTestAuditEntry("project1", "secret1", 1);
         AuditEntry auditEntry2 = createTestAuditEntry("project2", "secret2", 2);
 
-        Stream<AuditOrTick.Audit> auditStream = Stream.of(
+        List<AuditOrTick.Audit> auditList = List.of(
                 new AuditOrTick.Audit(auditEntry1, 6L),
                 new AuditOrTick.Audit(auditEntry2, 7L)
         );
 
-        when(walLogger.backlogAudits(existingCheckpoint)).thenReturn(auditStream);
+        when(walLogger.backlogAudits(existingCheckpoint)).thenReturn(auditList);
 
         // When
         walBacklogProcessor.processAuditBacklog();
@@ -124,7 +124,7 @@ class WalBacklogProcessorTest {
         when(auditProperties.getNodeName()).thenReturn(nodeName);
         when(auditProperties.getBatchTimeSeconds()).thenReturn(batchTimeSeconds);
         when(auditCheckpointRepository.findByNodeName(nodeName)).thenReturn(Optional.empty());
-        when(walLogger.backlogAudits(0L)).thenReturn(Stream.empty());
+        when(walLogger.backlogAudits(0L)).thenReturn(List.of());
 
         // When
         walBacklogProcessor.processAuditBacklog();
@@ -152,12 +152,12 @@ class WalBacklogProcessorTest {
         AuditEntry auditEntry1 = createTestAuditEntry("project1", "secret1", 1);
         AuditEntry auditEntry2 = createTestAuditEntry("project2", "secret2", 2);
 
-        Stream<AuditOrTick.Audit> auditStream = Stream.of(
+        List<AuditOrTick.Audit> auditList = List.of(
                 new AuditOrTick.Audit(auditEntry1, 1L),
                 new AuditOrTick.Audit(auditEntry2, 2L)
         );
 
-        when(walLogger.backlogAudits(0L)).thenReturn(auditStream);
+        when(walLogger.backlogAudits(0L)).thenReturn(auditList);
 
         // When
         walBacklogProcessor.processAuditBacklog();
@@ -193,7 +193,7 @@ class WalBacklogProcessorTest {
         AuditEntry auditEntry4 = createTestAuditEntry("project4", "secret4", 4);
         AuditEntry auditEntry5 = createTestAuditEntry("project5", "secret5", 5);
 
-        Stream<AuditOrTick.Audit> auditStream = Stream.of(
+        List<AuditOrTick.Audit> auditList = List.of(
                 new AuditOrTick.Audit(auditEntry1, 1L),
                 new AuditOrTick.Audit(auditEntry2, 2L),
                 new AuditOrTick.Audit(auditEntry3, 3L),
@@ -201,7 +201,7 @@ class WalBacklogProcessorTest {
                 new AuditOrTick.Audit(auditEntry5, 5L)
         );
 
-        when(walLogger.backlogAudits(0L)).thenReturn(auditStream);
+        when(walLogger.backlogAudits(0L)).thenReturn(auditList);
 
         // When
         walBacklogProcessor.processAuditBacklog();
@@ -261,11 +261,11 @@ class WalBacklogProcessorTest {
         when(auditCheckpointRepository.findByNodeName(nodeName)).thenReturn(Optional.empty());
 
         AuditEntry auditEntry = createTestAuditEntry("project1", "secret1", 1);
-        Stream<AuditOrTick.Audit> auditStream = Stream.of(
+        List<AuditOrTick.Audit> auditList = List.of(
                 new AuditOrTick.Audit(auditEntry, 1L)
         );
 
-        when(walLogger.backlogAudits(0L)).thenReturn(auditStream);
+        when(walLogger.backlogAudits(0L)).thenReturn(auditList);
 
         // When
         walBacklogProcessor.processAuditBacklog();
