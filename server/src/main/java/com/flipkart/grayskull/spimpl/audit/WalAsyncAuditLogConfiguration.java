@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.repositories.AuditCheckpointRepository;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.AllArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -30,8 +31,8 @@ public class WalAsyncAuditLogConfiguration {
     }
 
     @Bean
-    public WalAsyncAuditLogger walAsyncAuditLogger(AuditLogPersister auditLogPersister, WalLogger walLogger) {
-        return new WalAsyncAuditLogger(auditProperties.getAuditQueueSize(), auditProperties.getBatchSize(), auditLogPersister, walLogger);
+    public WalAsyncAuditLogger walAsyncAuditLogger(AuditLogPersister auditLogPersister, WalLogger walLogger, MeterRegistry meterRegistry) {
+        return new WalAsyncAuditLogger(auditProperties.getAuditQueueSize(), auditProperties.getBatchSize(), auditLogPersister, walLogger, meterRegistry);
     }
 
     @Bean
@@ -40,7 +41,7 @@ public class WalAsyncAuditLogConfiguration {
     }
 
     @Bean
-    public WalCleaner walCleaner(WalLogger walLogger) {
-        return new WalCleaner(walLogger, auditCheckpointRepository,  auditProperties);
+    public WalCleaner walCleaner(WalLogger walLogger, MeterRegistry meterRegistry) {
+        return new WalCleaner(walLogger, auditCheckpointRepository,  auditProperties, meterRegistry);
     }
 }

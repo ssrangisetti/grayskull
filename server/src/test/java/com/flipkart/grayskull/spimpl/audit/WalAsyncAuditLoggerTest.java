@@ -1,6 +1,8 @@
 package com.flipkart.grayskull.spimpl.audit;
 
 import com.flipkart.grayskull.models.db.AuditEntry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,7 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.flipkart.grayskull.spimpl.audit.WalConstants.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
@@ -22,11 +24,13 @@ class WalAsyncAuditLoggerTest {
 
     private final WalLogger walLogger = mock(WalLogger.class);
 
+    private final MeterRegistry meterRegistry = mock(MeterRegistry.class);
+
     private WalAsyncAuditLogger walAsyncAuditLogger;
 
     @BeforeEach
     void setUp() {
-        walAsyncAuditLogger = new WalAsyncAuditLogger(100, 3, auditLogPersister, walLogger);
+        walAsyncAuditLogger = new WalAsyncAuditLogger(100, 3, auditLogPersister, walLogger, meterRegistry);
     }
 
     @AfterEach
@@ -54,12 +58,14 @@ class WalAsyncAuditLoggerTest {
         // Given
         AuditEntry auditEntry = createTestAuditEntry("project1", "secret1", 1);
         when(walLogger.write(auditEntry)).thenThrow(new IOException("Test IO exception"));
+        when(meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, LOG_ACTION, EXCEPTION_TAG, "IOException")).thenReturn(mock(Counter.class));
 
         // When
         walAsyncAuditLogger.log(auditEntry);
 
         // Then
         verify(walLogger).write(auditEntry);
+        verify(meterRegistry).counter(AUDIT_ERROR_METRIC, ACTION_TAG, LOG_ACTION, EXCEPTION_TAG, "IOException");
         // The exception should be logged but not re-thrown
         // We can't easily verify logging without a test logger, but the method should complete normally
     }
@@ -237,18 +243,20 @@ class WalAsyncAuditLoggerTest {
     @Test
     void shouldHandleQueueFullScenario() throws IOException {
         // Given - Create logger with very small queue size
-        WalAsyncAuditLogger smallQueueLogger = new WalAsyncAuditLogger(1, 3, auditLogPersister, walLogger);
+        WalAsyncAuditLogger smallQueueLogger = new WalAsyncAuditLogger(1, 3, auditLogPersister, walLogger, meterRegistry);
         // not starting the listener as it will keep consuming the events constantly
 
         when(walLogger.write(any(AuditEntry.class))).thenReturn(1L);
+        when(meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, LOG_ACTION, EXCEPTION_TAG, "IllegalStateException")).thenReturn(mock(Counter.class));
 
         // When - Add more entries than queue can hold
         AuditEntry auditEntry1 = createTestAuditEntry("project1", "secret1", 1);
         AuditEntry auditEntry2 = createTestAuditEntry("project2", "secret2", 2);
 
         smallQueueLogger.log(auditEntry1);
-        assertThatThrownBy(() -> smallQueueLogger.log(auditEntry2)).isInstanceOf(IllegalStateException.class);
+        smallQueueLogger.log(auditEntry2);
 
+        verify(meterRegistry).counter(AUDIT_ERROR_METRIC, ACTION_TAG, LOG_ACTION, EXCEPTION_TAG, "IllegalStateException");
         // Cleanup
         smallQueueLogger.preDestroy();
     }
@@ -256,7 +264,7 @@ class WalAsyncAuditLoggerTest {
     @Test
     void shouldProcessAuditWithDifferentBatchSizes() throws IOException {
         // Given - Create logger with different batch size
-        WalAsyncAuditLogger customBatchLogger = new WalAsyncAuditLogger(100, 5, auditLogPersister, walLogger);
+        WalAsyncAuditLogger customBatchLogger = new WalAsyncAuditLogger(100, 5, auditLogPersister, walLogger, meterRegistry);
 
         AtomicLong num = new AtomicLong(0);
         when(walLogger.write(any(AuditEntry.class))).thenAnswer(invocation -> num.getAndIncrement());
