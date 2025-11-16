@@ -5,11 +5,16 @@ import com.flipkart.grayskull.spi.AsyncAuditLogger;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.*;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
@@ -23,16 +28,36 @@ public class DerbyAsyncAuditLogger implements AsyncAuditLogger {
     private final AuditEntryRepository auditEntryRepository;
     private final AuditCheckpointRepository auditCheckpointRepository;
 
+    private final ExecutorService executorService;
+
     public DerbyAsyncAuditLogger(AuditProperties auditProperties, DerbyDao derbyDao, MeterRegistry meterRegistry, AuditEntryRepository auditEntryRepository, AuditCheckpointRepository auditCheckpointRepository) {
         this.auditProperties = auditProperties;
         this.derbyDao = derbyDao;
         this.meterRegistry = meterRegistry;
         this.auditEntryRepository = auditEntryRepository;
         this.auditCheckpointRepository = auditCheckpointRepository;
+        this.executorService = ExecutorServiceMetrics.monitor(meterRegistry, Executors.newVirtualThreadPerTaskExecutor(), "audit-logger");
+    }
+
+    @PreDestroy
+    public void shutDown() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executorService.shutdownNow();
+        }
     }
 
     @Override
     public void log(AuditEntry auditEntry) {
+        executorService.submit(() -> logInternal(auditEntry));
+    }
+
+    public void logInternal(AuditEntry auditEntry) {
         try {
             derbyDao.insertAuditEntry(auditEntry);
         } catch (JsonProcessingException e) {

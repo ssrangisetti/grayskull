@@ -5,8 +5,10 @@ import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.repositories.AuditEntryRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.*;
 import java.time.Duration;
@@ -32,7 +34,8 @@ class DerbyAsyncAuditLoggerTest {
 
     @BeforeEach
     void setUp() {
-        logger = new DerbyAsyncAuditLogger(auditProperties, derbyDao, meterRegistry, auditEntryRepository, auditCheckpointRepository);
+        logger = new DerbyAsyncAuditLogger(auditProperties, derbyDao, new CompositeMeterRegistry(), auditEntryRepository, auditCheckpointRepository);
+        ReflectionTestUtils.setField(logger, "meterRegistry", meterRegistry);
     }
 
     @Test
@@ -40,6 +43,7 @@ class DerbyAsyncAuditLoggerTest {
         AuditEntry auditEntry = createTestAuditEntry();
 
         logger.log(auditEntry);
+        logger.shutDown();
 
         verify(derbyDao).insertAuditEntry(auditEntry);
     }
@@ -51,6 +55,7 @@ class DerbyAsyncAuditLoggerTest {
         when(meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, "serialize", EXCEPTION_TAG, "JsonProcessingException")).thenReturn(counter);
 
         logger.log(auditEntry);
+        logger.shutDown();
 
         verify(counter).increment();
     }
@@ -62,6 +67,7 @@ class DerbyAsyncAuditLoggerTest {
         when(meterRegistry.counter(AUDIT_ERROR_METRIC, ACTION_TAG, "log", EXCEPTION_TAG, "SQLException")).thenReturn(counter);
 
         logger.log(auditEntry);
+        logger.shutDown();
 
         verify(counter).increment();
     }
