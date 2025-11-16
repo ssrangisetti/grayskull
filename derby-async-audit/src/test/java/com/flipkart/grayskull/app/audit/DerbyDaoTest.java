@@ -3,6 +3,7 @@ package com.flipkart.grayskull.app.audit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flipkart.grayskull.spi.models.AuditEntry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class DerbyDaoTest {
     void setUp() throws SQLException {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        derbyDao = new DerbyDao("jdbc:derby:memory:testdb;create=true", objectMapper);
+        derbyDao = new DerbyDao("jdbc:derby:memory:testdb;create=true", objectMapper, new CompositeMeterRegistry());
         derbyDao.init();
     }
 

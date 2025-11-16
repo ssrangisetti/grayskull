@@ -12,7 +12,6 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.IOException;
-import java.sql.SQLException;
 
 @Configuration
 @EnableMongoRepositories(basePackageClasses = AuditCheckpointRepository.class)
@@ -21,8 +20,8 @@ import java.sql.SQLException;
 public class AuditConfiguration {
 
     @Bean
-    public DerbyDao derbyDao(AuditProperties auditProperties, ObjectMapper objectMapper) throws SQLException {
-        return new DerbyDao(auditProperties.getDerbyUrl(), objectMapper);
+    public DerbyDao derbyDao(AuditProperties auditProperties, ObjectMapper objectMapper, MeterRegistry meterRegistry) {
+        return new DerbyDao(auditProperties.getDerbyUrl(), objectMapper, meterRegistry);
     }
 
     @Bean

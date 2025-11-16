@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import io.micrometer.core.annotation.Counted;
 import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class DerbyDao {
 
     private final String derbyUrl;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     @PostConstruct
     public void init() throws SQLException {
@@ -32,6 +34,7 @@ public class DerbyDao {
                 throw e;
             }
         }
+        meterRegistry.gauge("derby.audit.entries", this, DerbyDao::getAuditEntriesCount);
     }
 
     public void insertAuditEntry(AuditEntry auditEntry) throws SQLException, JsonProcessingException {
@@ -48,6 +51,18 @@ public class DerbyDao {
                 PreparedStatement statement = connection.prepareStatement("DELETE FROM audits WHERE id <= ?")) {
             statement.setLong(1, maxId);
             statement.execute();
+        }
+    }
+
+    public double getAuditEntriesCount() {
+        try (Connection connection = DriverManager.getConnection(derbyUrl);
+                PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM audits")) {
+            ResultSet resultSet = statement.executeQuery();
+            resultSet.next();
+            return resultSet.getLong(1);
+        } catch (SQLException e) {
+            log.error("Failed to get audit entries count", e);
+            return -1;
         }
     }
 
