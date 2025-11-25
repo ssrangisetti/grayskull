@@ -19,6 +19,7 @@ public @interface Audit {
     /**
      * Specifies the type of action being performed.
      * 
+     *
      * @return The {@link AuditAction} representing the method's purpose.
      */
     AuditAction action();
