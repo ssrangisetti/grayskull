@@ -6,6 +6,7 @@ import com.flipkart.grayskull.audit.utils.RequestUtils;
 import com.flipkart.grayskull.models.dto.request.CreateSecretRequest;
 import com.flipkart.grayskull.models.dto.request.UpgradeSecretDataRequest;
 import com.flipkart.grayskull.models.dto.response.*;
+import com.flipkart.grayskull.spi.MetadataValidator;
 import com.flipkart.grayskull.spi.models.AuditEntry;
 import com.flipkart.grayskull.spi.models.enums.LifecycleState;
 import com.flipkart.grayskull.service.interfaces.SecretService;
@@ -23,6 +24,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,10 +37,11 @@ public class SecretController {
     private final SecretService secretService;
     private final AsyncAuditLogger asyncAuditLogger;
     private final RequestUtils requestUtils;
+    private final List<MetadataValidator> metadataValidators;
 
     @Operation(summary = "Lists secrets for a given project with pagination. Always returns the latest version of the secret.")
     @GetMapping
-    @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
+    @PreAuthorize("@grayskullSecurity.ensureEmptyActor() and @grayskullSecurity.hasPermission(#projectId, 'secrets.list')")
     public ResponseTemplate<ListSecretsResponse> listSecrets(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
@@ -49,10 +52,11 @@ public class SecretController {
 
     @Operation(summary = "Creates a new secret for a given project.")
     @PostMapping
-    @PreAuthorize("@grayskullSecurity.hasPermission(#projectId, 'secrets.create')")
+    @PreAuthorize("@grayskullSecurity.checkProviderAuthorization(#request.getProvider()) and @grayskullSecurity.hasPermission(#projectId, 'secrets.create')")
     public ResponseTemplate<SecretResponse> createSecret(
             @PathVariable("projectId") @NotBlank @Size(max = 255) String projectId,
             @Valid @RequestBody CreateSecretRequest request) {
+        metadataValidators.forEach(plugin -> plugin.validateMetadata(request.getProvider(), request.getProviderMeta()));
         SecretResponse response = secretService.createSecret(projectId, request);
         return ResponseTemplate.success(response, "Successfully created secret.");
     }
