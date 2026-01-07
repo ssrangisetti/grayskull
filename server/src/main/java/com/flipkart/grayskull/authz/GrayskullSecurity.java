@@ -1,14 +1,19 @@
 package com.flipkart.grayskull.authz;
 
+import com.flipkart.grayskull.spi.authn.GrayskullUser;
 import com.flipkart.grayskull.spi.models.Project;
 import com.flipkart.grayskull.spi.GrayskullAuthorizationProvider;
 import com.flipkart.grayskull.spi.authz.AuthorizationContext;
 import com.flipkart.grayskull.spi.repositories.ProjectRepository;
+import com.flipkart.grayskull.spi.repositories.SecretProviderRepository;
 import com.flipkart.grayskull.spi.repositories.SecretRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 /**
  * A security facade bean that centralizes authorization logic for use in Spring
@@ -27,6 +32,7 @@ public class GrayskullSecurity {
 
     private final ProjectRepository projectRepository;
     private final SecretRepository secretRepository;
+    private final SecretProviderRepository secretProviderRepository;
     private final GrayskullAuthorizationProvider authorizationProvider;
 
     /**
@@ -107,5 +113,22 @@ public class GrayskullSecurity {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         AuthorizationContext context = AuthorizationContext.forGlobal(authentication);
         return authorizationProvider.isAuthorized(context, action);
+    }
+
+    /**
+     * Checks for authorizaion with respect to user delegation. for 'SELF' provider, it checks if the actor is empty.
+     * for other providers, it checks if the actor is the one registered with the provider.
+     * @param providerName the secret provider name
+     */
+    public boolean checkProviderAuthorization(String providerName) {
+        GrayskullUser user = (GrayskullUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Optional<String> actorName = user.getActorName();
+        if ("SELF".equals(providerName)) {
+            return true;
+        }
+        String actor = actorName.orElseThrow(() -> new AccessDeniedException("Expected an actor name for the " + providerName + " managed secrets"));
+        return secretProviderRepository.findByName(providerName)
+                .map(secretProvider -> secretProvider.getPrincipal().equals(actor))
+                .orElse(false);
     }
 }
